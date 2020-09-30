@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os/exec"
@@ -13,8 +14,9 @@ import (
 
 func main() {
 	router := mux.NewRouter()
-	router.HandleFunc("/", traceUI)
 	router.HandleFunc("/{command}/{host}", doTrace)
+	router.Methods("GET").HandlerFunc(traceUI)
+	router.Methods("POST").HandlerFunc(doTrace)
 	server := &http.Server{
 		Addr:    ":3001",
 		Handler: router,
@@ -26,36 +28,61 @@ func main() {
 }
 
 func traceUI(w http.ResponseWriter, req *http.Request) {
-	w.Write([]byte(`<!DOCTYPE html><html><title>Traceroute</title>
+	remote_host := "8.8.8.8"
+	if len(req.Header.Values("Cf-Connecting-Ip")) == 1 {
+		remote_host = req.Header.Values("Cf-Connecting-Ip")[0]
+	}
+	const tpl = `<!DOCTYPE html><html>
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+	<title>Traceroute</title>
 	<style type="text/css">
 	body {
-		height: 100vw;
+		height: 95vh;
+		flex-direction: column;
 	}
 	body, form {
 		display: flex;
-		flex-direction: column;
 		align-items: stretch;
 	}
-	input, select {
+    form {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    form {
+        position: fixed;
+        bottom: 0.1em;
+        left: 0.1em;
+        right: 0.1em;
+    }
+    input {
+		flex: 1 100%;
+    }
+	input, select, button {
 		padding: 1em;
 		line-height: 2em;
 		border: none;
 		border-radius: 5px;
 	}
+    select, button {
+		flex: 1 0;
+		min-width: 150px;
+		background: darkseagreen;
+    }
 	iframe {
 		border: none;
 		flex: 1 100%;
 	}
 	</style>
-	<form id="hostForm">
-		<input id="host" type="text" value="1.1.1.1">
-		<select>
+	<form id="hostForm" method="POST">
+		<input name="host" type="text" value="{{ .IP }}">
+		<select name="command">
 			<option value="traceroute">traceroute</option>
 			<option value="mtr">mtr</option>
 			<option value="ping">ping</option>
 		</select>
+		<button type="submit">Start</button>
 	</form>
-	<iframe id="results"></iframe>
+	<iframe id="results" src="traceroute/{{ .IP }}"></iframe>
 	<script type="text/javascript">
 	document.bgColor = '#DDD';
 	const switchTarget = () => {
@@ -68,17 +95,36 @@ func traceUI(w http.ResponseWriter, req *http.Request) {
 		e.preventDefault();
 	} );
 	document.querySelector('iframe').addEventListener('load', () => {
-		document.querySelector('iframe').style.minHeight = document.querySelector('iframe').contentWindow.document.body.offsetHeight + "px";
-		document.bgColor = '#DFD'
+		document.querySelector('iframe').style.minHeight = (100 + document.querySelector('iframe').contentWindow.document.body.offsetHeight) + "px";
+		document.bgColor = '#DFD';
 	})
 	</script>
-	</html>`))
+	</html>`
+	t, err := template.New("webpage").Parse(tpl)
+	if err != nil {
+		log.Fatal(err)
+	}
+	data := struct {
+		IP string
+	}{
+		IP: remote_host,
+	}
+	err = t.Execute(w, data)
 }
 
 func doTrace(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
-	host := vars["host"]
+	host, ok := vars["host"]
 	command := vars["command"]
+	if !ok {
+		req.ParseForm()
+		if len(req.Form["host"]) != 1 || len(req.Form["command"]) != 1 {
+			http.Error(w, "bad request", 400)
+			return
+		}
+		host = req.Form["host"][0]
+		command = req.Form["command"][0]
+	}
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -110,8 +156,7 @@ func doTrace(w http.ResponseWriter, req *http.Request) {
 	default:
 		return
 	}
-	cmd.Stdout = bufrw
-	cmd.Stderr = bufrw
+	cmd.Stdout, cmd.Stderr = bufrw, bufrw
 	bufrw.WriteString(fmt.Sprintf("%q to %q...\r\n", command, host))
 	bufrw.Flush()
 
