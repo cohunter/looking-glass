@@ -1,7 +1,9 @@
-FROM ubuntu:latest
+FROM golang:alpine AS compile
+ADD . /src
+WORKDIR /src
+RUN go build
 
-RUN apt-get -y update
-RUN apt-get -y upgrade
-RUN apt-get -y install traceroute iputils-ping mtr-tiny
-ADD ./trace /trace
-RUN /trace
+FROM alpine:latest
+COPY --from=compile /src/looking-glass /looking-glass
+RUN apk add iputils mtr
+ENTRYPOINT ["/looking-glass"]
