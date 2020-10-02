@@ -1,4 +1,4 @@
-module trace
+module looking-glass
 
 go 1.15
 
