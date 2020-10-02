@@ -18,7 +18,7 @@ func main() {
 	router.Methods("GET").HandlerFunc(traceUI)
 	router.Methods("POST").HandlerFunc(doTrace)
 	server := &http.Server{
-		Addr:    ":3001",
+		Addr:    ":80",
 		Handler: router,
 	}
 
