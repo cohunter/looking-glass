@@ -20,7 +20,7 @@ COPY --from=mtr /mtr-0.94/mtr-packet /busybox/mtr-packet
 WORKDIR /busybox
 RUN upx -9 *
 RUN ln -s ping traceroute
-RUN chmod 4555 /busybox/ping
+RUN chmod 4555 /busybox/ping /busybox/mtr-packet
 RUN echo -e 'root:x:0:0:root:/root:/sbin/nologin\nnobody:x:65534:65534:nobody:/:/sbin/nologin' > /etc/passwd
 
 FROM scratch
