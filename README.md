@@ -1,3 +1,3 @@
 Run with docker:
 
-`docker run --rm -p 3000:80 cohunter/looking-glass`
+`docker run --rm -p 80:3000 -d cohunter/looking-glass`
